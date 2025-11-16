@@ -3,9 +3,10 @@ from typing import List, Optional
 from app.database.images import db_get_all_images
 from app.schemas.images import ErrorResponse
 from app.utils.images import image_util_parse_metadata
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from app.database.images import db_toggle_image_favourite_status, db_get_image_by_id
 from app.logging.setup_logging import get_logger
+import uuid
 
 # Initialize logger
 logger = get_logger(__name__)
@@ -93,6 +94,15 @@ def get_all_images(
 
 class ToggleFavouriteRequest(BaseModel):
     image_id: str
+
+    @field_validator("image_id")
+    @classmethod
+    def validate_uuid(cls, v: str) -> str:
+        try:
+            uuid.UUID(v)
+            return v
+        except ValueError:
+            raise ValueError("image_id must be a valid UUID")
 
 
 @router.post("/toggle-favourite")
