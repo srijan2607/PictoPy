@@ -198,6 +198,84 @@ def db_get_all_images(tagged: Union[bool, None] = None) -> List[dict]:
         return []
 
 
+def db_get_image_by_id(image_id: ImageId) -> Union[dict, None]:
+    """
+    Get a single image by ID with its tags.
+
+    Args:
+        image_id: ID of the image to fetch
+
+    Returns:
+        Dictionary containing image data including tags, or None if not found
+    """
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+
+            cursor.execute(
+                """
+                SELECT
+                    i.id,
+                    i.path,
+                    i.folder_id,
+                    i.thumbnailPath,
+                    i.metadata,
+                    i.isTagged,
+                    i.isFavourite,
+                    m.name as tag_name
+                FROM images i
+                LEFT JOIN image_classes ic ON i.id = ic.image_id
+                LEFT JOIN mappings m ON ic.class_id = m.class_id
+                WHERE i.id = ?
+                ORDER BY m.name
+                """,
+                (image_id,),
+            )
+
+            results = cursor.fetchall()
+
+            if not results:
+                return None
+
+            # Parse first row for image data
+            (
+                img_id,
+                path,
+                folder_id,
+                thumbnail_path,
+                metadata,
+                is_tagged,
+                is_favourite,
+                tag_name,
+            ) = results[0]
+
+            # Safely parse metadata JSON -> dict
+            from app.utils.images import image_util_parse_metadata
+
+            metadata_dict = image_util_parse_metadata(metadata)
+
+            # Collect all tags
+            tags = [tag_name] if tag_name else []
+            for row in results[1:]:
+                if row[7]:  # tag_name is at index 7
+                    tags.append(row[7])
+
+            return {
+                "id": img_id,
+                "path": path,
+                "folder_id": str(folder_id),
+                "thumbnailPath": thumbnail_path,
+                "metadata": metadata_dict,
+                "isTagged": bool(is_tagged),
+                "isFavourite": bool(is_favourite),
+                "tags": tags if tags else None,
+            }
+
+    except Exception as e:
+        logger.error(f"Error getting image by ID: {e}")
+        return None
+
+
 def db_get_untagged_images() -> List[UntaggedImageRecord]:
     """
     Find all images that need AI tagging.
